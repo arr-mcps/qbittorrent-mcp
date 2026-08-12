@@ -1,6 +1,6 @@
 [project]
 name = "qbittorrent-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP server for qBittorrent's WebUI API v2"
 license = "MIT"
 requires-python = ">=3.11"
