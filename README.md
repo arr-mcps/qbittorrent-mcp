@@ -1,5 +1,6 @@
 # qbittorrent-mcp
 
+Part of the [arr-mcps](https://github.com/SavageCore/arr-mcps) collection.
 MCP server exposing [qBittorrent](https://github.com/qbittorrent/qBittorrent)'s
 WebUI API v2 (qBittorrent >= 5.0) as tools, so an LLM can manage your torrents:
 list, inspect properties/trackers/files, add/pause/resume/delete torrents,
