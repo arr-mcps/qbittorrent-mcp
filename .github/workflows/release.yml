@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+
+      - run: uv sync
+
+      - run: uv run pytest
+
+      - run: uv version "${GITHUB_REF_NAME#v}"
+
+      - run: uv build
+
+      - name: Generate release notes
+        id: cliff
+        uses: orhun/git-cliff-action@v4.8.0
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Append full changelog link
+        run: |
+          prev=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          if [ -n "$prev" ] && [ "$prev" != "$GITHUB_REF_NAME" ]; then
+            printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' \
+              "$GITHUB_REPOSITORY" "$prev" "$GITHUB_REF_NAME" \
+              >> "${{ steps.cliff.outputs.changelog }}"
+          fi
+
+      - run: gh release create "$GITHUB_REF_NAME" dist/* --notes-file "${{ steps.cliff.outputs.changelog }}"
+        env:
+          GH_TOKEN: ${{ github.token }}

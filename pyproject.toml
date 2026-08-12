@@ -1,0 +1,22 @@
+[project]
+name = "qbittorrent-mcp"
+version = "0.0.0"
+description = "MCP server for qBittorrent's WebUI API v2"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = ["fastmcp>=2.0.0"]
+
+[project.scripts]
+qbittorrent-mcp = "qbittorrent_mcp:main"
+
+[dependency-groups]
+dev = ["pytest>=8.0.0", "pytest-asyncio>=0.24.0"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = ["integration: hits a real qBittorrent instance (needs QBITTORRENT_URL + auth env)"]
+addopts = "-m 'not integration'"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
