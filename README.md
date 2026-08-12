@@ -21,7 +21,7 @@ enabled (Tools > Preferences > WebUI) and one of two auth methods:
 
 ## Install
 
-Download a wheel from the [latest release](https://github.com/pickpppcc/qbittorrent-mcp/releases/latest)
+Download a wheel from the [latest release](https://github.com/SavageCore/qbittorrent-mcp/releases/latest)
 and install it as a `uv` tool (no repo checkout needed):
 
 ```bash
@@ -254,7 +254,7 @@ make help  # list all commands
 | `make clean` | Remove build artifacts |
 
 The release workflow (`.github/workflows/release.yml`) builds and publishes to
-[Releases](https://github.com/pickpppcc/qbittorrent-mcp/releases) whenever a `v*`
+[Releases](https://github.com/SavageCore/qbittorrent-mcp/releases) whenever a `v*`
 tag is pushed - so the usual flow is `make bump-patch`, commit, then tag and
 push.
 
