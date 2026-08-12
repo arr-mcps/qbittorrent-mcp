@@ -81,9 +81,15 @@ async def server(recorder, monkeypatch):
     await client.aclose()
 
 
+_OP_GROUP = {op: group for group, ops in qbittorrent_mcp._GROUPS.items() for op in ops}
+
+
 async def call(server, tool, **kwargs):
+    """Call `tool` (an operation name) through the portmanteau group tool
+    that now hosts it, so every existing per-operation test keeps working
+    unmodified aside from this helper."""
     async with Client(server) as c:
-        return await c.call_tool(tool, kwargs)
+        return await c.call_tool(_OP_GROUP[tool], {"operation": tool, "arguments": kwargs})
 
 
 # --- auth --------------------------------------------------------------------
@@ -905,3 +911,29 @@ def test_main_requires_qbittorrent_url(monkeypatch):
     monkeypatch.delenv("QBITTORRENT_URL", raising=False)
     with pytest.raises(SystemExit):
         qbittorrent_mcp.main()
+
+
+# --- portmanteau grouping safety net --------------------------------------------
+
+def test_all_operations_grouped():
+    """Every entry in _OP_GROUP came from _GROUPS; assert no duplicates and
+    that every group name resolves to a real module-level function - this is
+    the safety net for the group-tool consolidation."""
+    grouped_names = [n for names in qbittorrent_mcp._GROUPS.values() for n in names]
+    assert len(grouped_names) == len(set(grouped_names))
+    for n in grouped_names:
+        assert hasattr(qbittorrent_mcp, n), f"{n} not found in qbittorrent_mcp module"
+
+
+async def test_group_tools_are_the_only_registered_tools(server):
+    async with Client(server) as c:
+        tools = await c.list_tools()
+    assert {t.name for t in tools} == set(qbittorrent_mcp._GROUPS)
+
+
+async def test_unknown_operation_rejected_by_schema(server):
+    # The Literal[...] enum on `operation` means an invalid value never
+    # reaches _register_group's dispatch body - pydantic rejects it first.
+    with pytest.raises(ToolError, match="validation error"):
+        async with Client(server) as c:
+            await c.call_tool("qbittorrent_auth", {"operation": "not_a_real_operation"})

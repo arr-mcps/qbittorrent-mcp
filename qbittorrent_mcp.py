@@ -20,13 +20,15 @@ mutating POST endpoints take form-encoded bodies (httpx data=). Note the qBittor
 """
 
 import base64
+import inspect
 import os
 import sys
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
+from fastmcp.tools import Tool
 from mcp.types import ToolAnnotations
 
 READONLY = ToolAnnotations(readOnlyHint=True)
@@ -74,7 +76,9 @@ async def _login() -> None:
         headers={"Referer": _base_url},
     )
     if r.status_code == 403:
-        raise ToolError("qBittorrent login failed: IP banned (too many failed login attempts)")
+        raise ToolError(
+            "qBittorrent login failed: IP banned (too many failed login attempts)"
+        )
     if r.status_code >= 400:
         raise ToolError(f"qBittorrent login failed: HTTP {r.status_code}")
     if "SID" not in _client.cookies:
@@ -126,7 +130,7 @@ def _omit(params: dict[str, Any]) -> dict[str, Any]:
 
 # --- auth --------------------------------------------------------------------
 
-@mcp.tool(annotations=WRITE)
+
 async def qbittorrent_logout() -> str:
     """Invalidate the current WebUI session. With API-key auth this endpoint is
     not reachable (API keys cannot interact with /auth/*) and the API will return
@@ -136,39 +140,34 @@ async def qbittorrent_logout() -> str:
 
 # --- application ---------------------------------------------------------------
 
-@mcp.tool(annotations=READONLY)
+
 async def qbittorrent_app_version() -> str:
     """The qBittorrent application version, e.g. v5.0.4."""
     return await _req("GET", "/app/version")
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_app_webapi_version() -> str:
     """The WebAPI version implemented by this qBittorrent, e.g. 2.14.1."""
     return await _req("GET", "/app/webapiVersion")
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_app_build_info() -> JSONObj:
     """Build info: Qt, libtorrent, Boost and OpenSSL versions plus app bitness."""
     return await _req("GET", "/app/buildInfo")
 
 
-@mcp.tool(annotations=DESTRUCTIVE)
 async def qbittorrent_app_shutdown() -> str:
     """Shut down the qBittorrent application. This stops the whole daemon/WebUI --
     use sparingly, it cannot be undone from here."""
     return await _req("POST", "/app/shutdown")
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_app_get_preferences() -> JSONObj:
     """All application preferences as a key/value object (locale, limits, paths,
     WebUI settings, etc). See README for the full field list."""
     return await _req("GET", "/app/preferences")
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_app_set_preferences(json: dict[str, Any]) -> str:
     """Update application preferences. Pass only the keys you want to change, e.g.
     {"max_active_downloads": 5, "save_path": "/downloads"}. String values must be
@@ -178,20 +177,17 @@ async def qbittorrent_app_set_preferences(json: dict[str, Any]) -> str:
     return await _req("POST", "/app/setPreferences", data={"json": _json.dumps(json)})
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_app_default_save_path() -> str:
     """The default save path for new torrents, e.g. C:/Users/me/Downloads."""
     return await _req("GET", "/app/defaultSavePath")
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_app_get_cookies() -> JSONArr:
     """The cookies qBittorrent sends when downloading .torrent files. Each entry
     has name/domain/path/value/expirationDate."""
     return await _req("GET", "/app/cookies")
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_app_set_cookies(cookies: list[dict[str, Any]]) -> str:
     """Replace the cookies used when downloading .torrent files. cookies is a JSON
     array of {name, domain, path, value, expirationDate} objects."""
@@ -202,7 +198,7 @@ async def qbittorrent_app_set_cookies(cookies: list[dict[str, Any]]) -> str:
 
 # --- log ----------------------------------------------------------------------
 
-@mcp.tool(annotations=READONLY)
+
 async def qbittorrent_log_main(
     normal: bool | None = None,
     info: bool | None = None,
@@ -228,7 +224,6 @@ async def qbittorrent_log_main(
     )
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_log_peers(last_known_id: int = -1) -> JSONArr:
     """Peer-block log entries as a JSON array of {id, ip, timestamp, blocked,
     reason}. Pass last_known_id to fetch only entries newer than a given id."""
@@ -237,7 +232,7 @@ async def qbittorrent_log_peers(last_known_id: int = -1) -> JSONArr:
 
 # --- sync ---------------------------------------------------------------------
 
-@mcp.tool(annotations=READONLY)
+
 async def qbittorrent_sync_maindata(rid: int = 0) -> JSONObj:
     """Differential state snapshot for UI sync. Pass the rid from the previous
     reply to get only changes; full_update=true means you received everything.
@@ -245,7 +240,6 @@ async def qbittorrent_sync_maindata(rid: int = 0) -> JSONObj:
     return await _req("GET", "/sync/maindata", _omit({"rid": rid}))
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_sync_torrent_peers(hash: str, rid: int = 0) -> JSONObj:
     """Differential peers data for one torrent. Pass the rid from the previous
     reply to get only changes."""
@@ -254,50 +248,43 @@ async def qbittorrent_sync_torrent_peers(hash: str, rid: int = 0) -> JSONObj:
 
 # --- transfer -----------------------------------------------------------------
 
-@mcp.tool(annotations=READONLY)
+
 async def qbittorrent_transfer_info() -> JSONObj:
     """Global transfer info: download/upload rates and totals, rate limits, DHT
     nodes and connection status."""
     return await _req("GET", "/transfer/info")
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_transfer_speed_limits_mode() -> int:
     """1 if alternative speed limits are enabled, 0 otherwise."""
     return int(await _req("GET", "/transfer/speedLimitsMode"))
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_transfer_toggle_speed_limits() -> str:
     """Toggle the alternative speed limits on/off."""
     return await _req("POST", "/transfer/toggleSpeedLimitsMode")
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_transfer_download_limit() -> int:
     """Global download speed limit in bytes/s (0 if no limit is applied)."""
     return int(await _req("GET", "/transfer/downloadLimit"))
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_transfer_set_download_limit(limit: int) -> str:
     """Set the global download speed limit in bytes/s (0 removes the limit)."""
     return await _req("POST", "/transfer/setDownloadLimit", data={"limit": limit})
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_transfer_upload_limit() -> int:
     """Global upload speed limit in bytes/s (0 if no limit is applied)."""
     return int(await _req("GET", "/transfer/uploadLimit"))
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_transfer_set_upload_limit(limit: int) -> str:
     """Set the global upload speed limit in bytes/s (0 removes the limit)."""
     return await _req("POST", "/transfer/setUploadLimit", data={"limit": limit})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_transfer_ban_peers(peers: str) -> str:
     """Ban peers. peers is one or more `host:port` values separated by a pipe,
     e.g. "1.2.3.4:6881|5.6.7.8:6882"."""
@@ -306,7 +293,7 @@ async def qbittorrent_transfer_ban_peers(peers: str) -> str:
 
 # --- torrent management ---------------------------------------------------------
 
-@mcp.tool(annotations=READONLY)
+
 async def qbittorrent_torrents_list(
     filter: str = "",
     category: str = "",
@@ -341,7 +328,6 @@ async def qbittorrent_torrents_list(
     )
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_torrent_properties(hash: str) -> JSONObj:
     """Generic properties of one torrent: save_path, creation/completion dates,
     total uploaded/downloaded, seeding_time, share_ratio, speeds, peer counts,
@@ -349,53 +335,47 @@ async def qbittorrent_torrent_properties(hash: str) -> JSONObj:
     return await _req("GET", "/torrents/properties", _omit({"hash": hash}))
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_torrent_trackers(hash: str) -> JSONArr:
     """Trackers of one torrent: url, status (0 disabled, 1 not contacted yet,
     2 working, 3 updating, 4 not working), tier, peer/seed/leech counts, msg."""
     return await _req("GET", "/torrents/trackers", _omit({"hash": hash}))
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_torrent_web_seeds(hash: str) -> JSONArr:
     """Web seeds of one torrent (array of {url})."""
     return await _req("GET", "/torrents/webseeds", _omit({"hash": hash}))
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_torrent_contents(hash: str, indexes: str = "") -> JSONArr:
     """Files of one torrent: index, name, size, progress, priority (0 skip, 1
     normal, 6 high, 7 maximal), is_seed, piece_range, availability. Pass
     indexes (pipe-separated) to fetch only those files."""
-    return await _req("GET", "/torrents/files", _omit({"hash": hash, "indexes": indexes}))
+    return await _req(
+        "GET", "/torrents/files", _omit({"hash": hash, "indexes": indexes})
+    )
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_torrent_piece_states(hash: str) -> JSONArr:
     """Piece states of one torrent as ints: 0 not downloaded, 1 downloading,
     2 downloaded."""
     return await _req("GET", "/torrents/pieceStates", _omit({"hash": hash}))
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_torrent_piece_hashes(hash: str) -> JSONArr:
     """SHA1 hashes of all pieces of one torrent, in order."""
     return await _req("GET", "/torrents/pieceHashes", _omit({"hash": hash}))
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_pause(hashes: str) -> str:
     """Pause (stop) torrents. hashes is pipe-separated or "all"."""
     return await _req("POST", "/torrents/stop", data={"hashes": hashes})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_resume(hashes: str) -> str:
     """Resume (start) torrents. hashes is pipe-separated or "all"."""
     return await _req("POST", "/torrents/start", data={"hashes": hashes})
 
 
-@mcp.tool(annotations=DESTRUCTIVE)
 async def qbittorrent_torrents_delete(hashes: str, delete_files: bool = False) -> str:
     """Delete torrents. hashes is pipe-separated or "all". With delete_files=true
     the downloaded data is deleted from disk too -- this is irreversible."""
@@ -406,19 +386,16 @@ async def qbittorrent_torrents_delete(hashes: str, delete_files: bool = False) -
     )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_recheck(hashes: str) -> str:
     """Force recheck of torrents. hashes is pipe-separated or "all"."""
     return await _req("POST", "/torrents/recheck", data={"hashes": hashes})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_reannounce(hashes: str) -> str:
     """Reannounce torrents to their trackers. hashes is pipe-separated or "all"."""
     return await _req("POST", "/torrents/reannounce", data={"hashes": hashes})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_add(
     urls: str = "",
     torrent_b64: str = "",
@@ -471,14 +448,14 @@ async def qbittorrent_torrents_add(
     return await _req("POST", "/torrents/add", data=form, files=files)
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_add_trackers(hash: str, urls: str) -> str:
     """Add trackers to a torrent. urls is one or more tracker URLs separated by
     newlines."""
-    return await _req("POST", "/torrents/addTrackers", data={"hash": hash, "urls": urls})
+    return await _req(
+        "POST", "/torrents/addTrackers", data={"hash": hash, "urls": urls}
+    )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_edit_tracker(hash: str, url: str, new_url: str) -> str:
     """Replace a tracker URL on a torrent with new_url."""
     return await _req(
@@ -488,45 +465,42 @@ async def qbittorrent_torrents_edit_tracker(hash: str, url: str, new_url: str) -
     )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_remove_trackers(hash: str, urls: str) -> str:
     """Remove trackers from a torrent. urls is one or more URLs separated by a
     pipe."""
-    return await _req("POST", "/torrents/removeTrackers", data={"hash": hash, "urls": urls})
+    return await _req(
+        "POST", "/torrents/removeTrackers", data={"hash": hash, "urls": urls}
+    )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_add_peers(hashes: str, peers: str) -> str:
     """Add peers to torrents. hashes is pipe-separated or "all"; peers is one or
     more `host:port` values separated by a pipe."""
-    return await _req("POST", "/torrents/addPeers", data={"hashes": hashes, "peers": peers})
+    return await _req(
+        "POST", "/torrents/addPeers", data={"hashes": hashes, "peers": peers}
+    )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_increase_priority(hashes: str) -> str:
     """Increase queue priority of torrents. hashes is pipe-separated or "all"."""
     return await _req("POST", "/torrents/increasePrio", data={"hashes": hashes})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_decrease_priority(hashes: str) -> str:
     """Decrease queue priority of torrents. hashes is pipe-separated or "all"."""
     return await _req("POST", "/torrents/decreasePrio", data={"hashes": hashes})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_top_priority(hashes: str) -> str:
     """Move torrents to the top of the queue. hashes is pipe-separated or "all"."""
     return await _req("POST", "/torrents/topPrio", data={"hashes": hashes})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_bottom_priority(hashes: str) -> str:
     """Move torrents to the bottom of the queue. hashes is pipe-separated or "all"."""
     return await _req("POST", "/torrents/bottomPrio", data={"hashes": hashes})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_file_priority(hash: str, id: str, priority: int) -> str:
     """Set file priority for a torrent. id is one or more file ids (from
     qbittorrent_torrent_contents) separated by a pipe; priority is 0 (skip),
@@ -538,14 +512,12 @@ async def qbittorrent_torrents_file_priority(hash: str, id: str, priority: int) 
     )
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_torrents_download_limit(hashes: str) -> JSONObj:
     """Per-torrent download speed limits (bytes/s), keyed by hash. hashes is
     pipe-separated or "all"."""
     return await _req("POST", "/torrents/downloadLimit", data={"hashes": hashes})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_set_download_limit(hashes: str, limit: int) -> str:
     """Set download speed limit (bytes/s) for torrents. hashes is pipe-separated
     or "all"; limit 0 means no limit."""
@@ -556,7 +528,6 @@ async def qbittorrent_torrents_set_download_limit(hashes: str, limit: int) -> st
     )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_set_share_limits(
     hashes: str,
     ratio_limit: float = -2,
@@ -578,14 +549,12 @@ async def qbittorrent_torrents_set_share_limits(
     )
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_torrents_upload_limit(hashes: str) -> JSONObj:
     """Per-torrent upload speed limits (bytes/s), keyed by hash. hashes is
     pipe-separated or "all"."""
     return await _req("POST", "/torrents/uploadLimit", data={"hashes": hashes})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_set_upload_limit(hashes: str, limit: int) -> str:
     """Set upload speed limit (bytes/s) for torrents. hashes is pipe-separated
     or "all"; limit 0 means no limit."""
@@ -596,7 +565,6 @@ async def qbittorrent_torrents_set_upload_limit(hashes: str, limit: int) -> str:
     )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_set_location(hashes: str, location: str) -> str:
     """Move torrents to a new download location on disk. hashes is
     pipe-separated or "all"; location is the destination directory."""
@@ -607,13 +575,11 @@ async def qbittorrent_torrents_set_location(hashes: str, location: str) -> str:
     )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_set_name(hash: str, name: str) -> str:
     """Rename a torrent (display name only, does not touch files on disk)."""
     return await _req("POST", "/torrents/rename", data={"hash": hash, "name": name})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_set_category(hashes: str, category: str) -> str:
     """Set the category of torrents. hashes is pipe-separated or "all"; pass an
     empty category to remove the current category."""
@@ -624,14 +590,14 @@ async def qbittorrent_torrents_set_category(hashes: str, category: str) -> str:
     )
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_torrents_categories() -> JSONObj:
     """All categories as {name: {name, savePath}}."""
     return await _req("GET", "/torrents/categories")
 
 
-@mcp.tool(annotations=WRITE)
-async def qbittorrent_torrents_create_category(category: str, save_path: str = "") -> str:
+async def qbittorrent_torrents_create_category(
+    category: str, save_path: str = ""
+) -> str:
     """Create a category with an optional save_path."""
     return await _req(
         "POST",
@@ -640,7 +606,6 @@ async def qbittorrent_torrents_create_category(category: str, save_path: str = "
     )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_edit_category(category: str, save_path: str) -> str:
     """Change the save_path of an existing category."""
     return await _req(
@@ -650,46 +615,45 @@ async def qbittorrent_torrents_edit_category(category: str, save_path: str) -> s
     )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_remove_categories(categories: str) -> str:
     """Remove categories. categories is one or more names separated by newlines.
     Torrents in a removed category become uncategorized."""
-    return await _req("POST", "/torrents/removeCategories", data={"categories": categories})
+    return await _req(
+        "POST", "/torrents/removeCategories", data={"categories": categories}
+    )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_add_tags(hashes: str, tags: str) -> str:
     """Add tags (comma-separated) to torrents (hashes pipe-separated or "all")."""
-    return await _req("POST", "/torrents/addTags", data={"hashes": hashes, "tags": tags})
+    return await _req(
+        "POST", "/torrents/addTags", data={"hashes": hashes, "tags": tags}
+    )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_remove_tags(hashes: str, tags: str) -> str:
     """Remove tags (comma-separated) from torrents (hashes pipe-separated or
     "all"). An empty tags value removes all tags from the torrents."""
-    return await _req("POST", "/torrents/removeTags", data={"hashes": hashes, "tags": tags})
+    return await _req(
+        "POST", "/torrents/removeTags", data={"hashes": hashes, "tags": tags}
+    )
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_torrents_tags() -> JSONArr:
     """All tags as a JSON array of strings."""
     return await _req("GET", "/torrents/tags")
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_create_tags(tags: str) -> str:
     """Create tags. tags is one or more names separated by commas."""
     return await _req("POST", "/torrents/createTags", data={"tags": tags})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_delete_tags(tags: str) -> str:
     """Delete tags. tags is one or more names separated by commas. Torrents keep
     their data but lose the deleted tags."""
     return await _req("POST", "/torrents/deleteTags", data={"tags": tags})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_set_auto_management(hashes: str, enable: bool) -> str:
     """Enable/disable Automatic Torrent Management for torrents (hashes
     pipe-separated or "all")."""
@@ -700,34 +664,39 @@ async def qbittorrent_torrents_set_auto_management(hashes: str, enable: bool) ->
     )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_toggle_sequential_download(hashes: str) -> str:
     """Toggle sequential download mode for torrents (hashes pipe-separated or
     "all")."""
-    return await _req("POST", "/torrents/toggleSequentialDownload", data={"hashes": hashes})
+    return await _req(
+        "POST", "/torrents/toggleSequentialDownload", data={"hashes": hashes}
+    )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_toggle_first_last_piece_priority(hashes: str) -> str:
     """Toggle first/last piece priority for torrents (hashes pipe-separated or
     "all")."""
-    return await _req("POST", "/torrents/toggleFirstLastPiecePrio", data={"hashes": hashes})
+    return await _req(
+        "POST", "/torrents/toggleFirstLastPiecePrio", data={"hashes": hashes}
+    )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_set_force_start(hashes: str, value: bool) -> str:
     """Force-start or un-force-start torrents (hashes pipe-separated or "all")."""
-    return await _req("POST", "/torrents/setForceStart", data={"hashes": hashes, "value": value})
+    return await _req(
+        "POST", "/torrents/setForceStart", data={"hashes": hashes, "value": value}
+    )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_torrents_set_super_seeding(hashes: str, value: bool) -> str:
     """Enable/disable super seeding for torrents (hashes pipe-separated or "all")."""
-    return await _req("POST", "/torrents/setSuperSeeding", data={"hashes": hashes, "value": value})
+    return await _req(
+        "POST", "/torrents/setSuperSeeding", data={"hashes": hashes, "value": value}
+    )
 
 
-@mcp.tool(annotations=WRITE)
-async def qbittorrent_torrents_rename_file(hash: str, old_path: str, new_path: str) -> str:
+async def qbittorrent_torrents_rename_file(
+    hash: str, old_path: str, new_path: str
+) -> str:
     """Rename a file inside a torrent (relative paths from the torrent root)."""
     return await _req(
         "POST",
@@ -736,8 +705,9 @@ async def qbittorrent_torrents_rename_file(hash: str, old_path: str, new_path: s
     )
 
 
-@mcp.tool(annotations=WRITE)
-async def qbittorrent_torrents_rename_folder(hash: str, old_path: str, new_path: str) -> str:
+async def qbittorrent_torrents_rename_folder(
+    hash: str, old_path: str, new_path: str
+) -> str:
     """Rename a folder inside a torrent (relative paths from the torrent root)."""
     return await _req(
         "POST",
@@ -748,25 +718,22 @@ async def qbittorrent_torrents_rename_folder(hash: str, old_path: str, new_path:
 
 # --- rss ----------------------------------------------------------------------
 
-@mcp.tool(annotations=WRITE)
+
 async def qbittorrent_rss_add_folder(path: str) -> str:
     """Create an RSS folder, e.g. "The Pirate Bay\\Top100"."""
     return await _req("POST", "/rss/addFolder", data={"path": path})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_rss_add_feed(url: str, path: str = "") -> str:
     """Add an RSS feed by URL, optionally into a folder path."""
     return await _req("POST", "/rss/addFeed", data={"url": url, "path": path})
 
 
-@mcp.tool(annotations=DESTRUCTIVE)
 async def qbittorrent_rss_remove_item(path: str) -> str:
     """Remove an RSS folder or feed, e.g. "The Pirate Bay\\Top100"."""
     return await _req("POST", "/rss/removeItem", data={"path": path})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_rss_move_item(item_path: str, dest_path: str) -> str:
     """Move or rename an RSS folder/feed from item_path to dest_path."""
     return await _req(
@@ -776,14 +743,12 @@ async def qbittorrent_rss_move_item(item_path: str, dest_path: str) -> str:
     )
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_rss_items(with_data: bool | None = None) -> JSONObj:
     """All RSS items as a nested object of folder -> feed -> URL. Set with_data
     to also include current feed articles."""
     return await _req("GET", "/rss/items", _omit({"withData": with_data}))
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_rss_mark_as_read(item_path: str, article_id: str = "") -> str:
     """Mark an RSS feed as read; pass article_id to mark only one article."""
     return await _req(
@@ -793,13 +758,11 @@ async def qbittorrent_rss_mark_as_read(item_path: str, article_id: str = "") -> 
     )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_rss_refresh_item(item_path: str) -> str:
     """Force-refresh an RSS folder or feed."""
     return await _req("POST", "/rss/refreshItem", data={"itemPath": item_path})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_rss_set_rule(rule_name: str, rule_def: dict[str, Any]) -> str:
     """Create or replace an auto-downloading RSS rule. rule_def keys: enabled,
     mustContain, mustNotContain, useRegex, episodeFilter, smartFilter,
@@ -815,7 +778,6 @@ async def qbittorrent_rss_set_rule(rule_name: str, rule_def: dict[str, Any]) -> 
     )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_rss_rename_rule(rule_name: str, new_rule_name: str) -> str:
     """Rename an auto-downloading rule."""
     return await _req(
@@ -825,19 +787,16 @@ async def qbittorrent_rss_rename_rule(rule_name: str, new_rule_name: str) -> str
     )
 
 
-@mcp.tool(annotations=DESTRUCTIVE)
 async def qbittorrent_rss_remove_rule(rule_name: str) -> str:
     """Remove an auto-downloading rule."""
     return await _req("POST", "/rss/removeRule", data={"ruleName": rule_name})
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_rss_rules() -> JSONObj:
     """All auto-downloading rules as {name: rule definition}."""
     return await _req("GET", "/rss/rules")
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_rss_matching_articles(rule_name: str) -> JSONObj:
     """All feed articles matching a rule, as {feed name: [article titles]}."""
     return await _req("GET", "/rss/matchingArticles", _omit({"ruleName": rule_name}))
@@ -845,8 +804,10 @@ async def qbittorrent_rss_matching_articles(rule_name: str) -> JSONObj:
 
 # --- search -------------------------------------------------------------------
 
-@mcp.tool(annotations=WRITE)
-async def qbittorrent_search_start(pattern: str, plugins: str = "enabled", category: str = "all") -> JSONObj:
+
+async def qbittorrent_search_start(
+    pattern: str, plugins: str = "enabled", category: str = "all"
+) -> JSONObj:
     """Start a search job across the configured plugins and return its id. plugins
     is plugin names separated by `|`, or "all"/"enabled". category limits the
     search (depends on the plugin), or "all"."""
@@ -857,54 +818,50 @@ async def qbittorrent_search_start(pattern: str, plugins: str = "enabled", categ
     )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_search_stop(id: int) -> str:
     """Stop a running search job by id."""
     return await _req("POST", "/search/stop", data={"id": id})
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_search_status(id: int | None = None) -> JSONArr:
     """Status of one search job (id) or all jobs: {id, status: Running|Stopped,
     total}."""
     return await _req("GET", "/search/status", _omit({"id": id}))
 
 
-@mcp.tool(annotations=READONLY)
-async def qbittorrent_search_results(id: int, limit: int | None = None, offset: int | None = None) -> JSONObj:
+async def qbittorrent_search_results(
+    id: int, limit: int | None = None, offset: int | None = None
+) -> JSONObj:
     """Results of a search job: {results: [{descrLink, fileName, fileSize,
     fileUrl, nbLeechers, nbSeeders, siteUrl}], status, total}. limit caps the
     count (0/negative = no limit); negative offset counts back from the end."""
-    return await _req("GET", "/search/results", _omit({"id": id, "limit": limit, "offset": offset}))
+    return await _req(
+        "GET", "/search/results", _omit({"id": id, "limit": limit, "offset": offset})
+    )
 
 
-@mcp.tool(annotations=DESTRUCTIVE)
 async def qbittorrent_search_delete(id: int) -> str:
     """Delete a search job and free its results."""
     return await _req("POST", "/search/delete", data={"id": id})
 
 
-@mcp.tool(annotations=READONLY)
 async def qbittorrent_search_plugins() -> JSONArr:
     """Installed search plugins: enabled, fullName, name, supportedCategories,
     url, version."""
     return await _req("GET", "/search/plugins")
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_search_install_plugin(sources: str) -> str:
     """Install search plugins. sources is one or more URLs or file paths
     separated by a pipe."""
     return await _req("POST", "/search/installPlugin", data={"sources": sources})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_search_uninstall_plugin(names: str) -> str:
     """Uninstall search plugins. names is one or more names separated by a pipe."""
     return await _req("POST", "/search/uninstallPlugin", data={"names": names})
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_search_enable_plugin(names: str, enable: bool) -> str:
     """Enable or disable search plugins. names is one or more names separated by
     a pipe."""
@@ -915,23 +872,228 @@ async def qbittorrent_search_enable_plugin(names: str, enable: bool) -> str:
     )
 
 
-@mcp.tool(annotations=WRITE)
 async def qbittorrent_search_update_plugins() -> str:
     """Update all installed search plugins to their latest versions."""
     return await _req("POST", "/search/updatePlugins")
+
+
+# Resource groups for portmanteau registration. Every tool function name
+# must appear in exactly one group - see test_all_functions_grouped.
+_GROUPS: dict[str, tuple[str, ...]] = {
+    "qbittorrent_torrents": (
+        "qbittorrent_torrent_contents",
+        "qbittorrent_torrent_piece_hashes",
+        "qbittorrent_torrent_piece_states",
+        "qbittorrent_torrent_properties",
+        "qbittorrent_torrent_trackers",
+        "qbittorrent_torrent_web_seeds",
+        "qbittorrent_torrents_add",
+        "qbittorrent_torrents_add_peers",
+        "qbittorrent_torrents_add_trackers",
+        "qbittorrent_torrents_delete",
+        "qbittorrent_torrents_edit_tracker",
+        "qbittorrent_torrents_list",
+        "qbittorrent_torrents_pause",
+        "qbittorrent_torrents_reannounce",
+        "qbittorrent_torrents_recheck",
+        "qbittorrent_torrents_remove_trackers",
+        "qbittorrent_torrents_rename_file",
+        "qbittorrent_torrents_rename_folder",
+        "qbittorrent_torrents_resume",
+        "qbittorrent_torrents_set_auto_management",
+        "qbittorrent_torrents_set_location",
+        "qbittorrent_torrents_set_name",
+    ),
+    "qbittorrent_torrent_limits": (
+        "qbittorrent_torrents_bottom_priority",
+        "qbittorrent_torrents_decrease_priority",
+        "qbittorrent_torrents_download_limit",
+        "qbittorrent_torrents_file_priority",
+        "qbittorrent_torrents_increase_priority",
+        "qbittorrent_torrents_set_download_limit",
+        "qbittorrent_torrents_set_force_start",
+        "qbittorrent_torrents_set_share_limits",
+        "qbittorrent_torrents_set_super_seeding",
+        "qbittorrent_torrents_set_upload_limit",
+        "qbittorrent_torrents_toggle_first_last_piece_priority",
+        "qbittorrent_torrents_toggle_sequential_download",
+        "qbittorrent_torrents_top_priority",
+        "qbittorrent_torrents_upload_limit",
+    ),
+    "qbittorrent_rss": (
+        "qbittorrent_rss_add_feed",
+        "qbittorrent_rss_add_folder",
+        "qbittorrent_rss_items",
+        "qbittorrent_rss_mark_as_read",
+        "qbittorrent_rss_matching_articles",
+        "qbittorrent_rss_move_item",
+        "qbittorrent_rss_refresh_item",
+        "qbittorrent_rss_remove_item",
+        "qbittorrent_rss_remove_rule",
+        "qbittorrent_rss_rename_rule",
+        "qbittorrent_rss_rules",
+        "qbittorrent_rss_set_rule",
+    ),
+    "qbittorrent_categories_tags": (
+        "qbittorrent_torrents_add_tags",
+        "qbittorrent_torrents_categories",
+        "qbittorrent_torrents_create_category",
+        "qbittorrent_torrents_create_tags",
+        "qbittorrent_torrents_delete_tags",
+        "qbittorrent_torrents_edit_category",
+        "qbittorrent_torrents_remove_categories",
+        "qbittorrent_torrents_remove_tags",
+        "qbittorrent_torrents_set_category",
+        "qbittorrent_torrents_tags",
+    ),
+    "qbittorrent_search": (
+        "qbittorrent_search_delete",
+        "qbittorrent_search_enable_plugin",
+        "qbittorrent_search_install_plugin",
+        "qbittorrent_search_plugins",
+        "qbittorrent_search_results",
+        "qbittorrent_search_start",
+        "qbittorrent_search_status",
+        "qbittorrent_search_stop",
+        "qbittorrent_search_uninstall_plugin",
+        "qbittorrent_search_update_plugins",
+    ),
+    "qbittorrent_application": (
+        "qbittorrent_app_build_info",
+        "qbittorrent_app_default_save_path",
+        "qbittorrent_app_get_cookies",
+        "qbittorrent_app_get_preferences",
+        "qbittorrent_app_set_cookies",
+        "qbittorrent_app_set_preferences",
+        "qbittorrent_app_shutdown",
+        "qbittorrent_app_version",
+        "qbittorrent_app_webapi_version",
+    ),
+    "qbittorrent_transfer": (
+        "qbittorrent_transfer_ban_peers",
+        "qbittorrent_transfer_download_limit",
+        "qbittorrent_transfer_info",
+        "qbittorrent_transfer_set_download_limit",
+        "qbittorrent_transfer_set_upload_limit",
+        "qbittorrent_transfer_speed_limits_mode",
+        "qbittorrent_transfer_toggle_speed_limits",
+        "qbittorrent_transfer_upload_limit",
+    ),
+    "qbittorrent_log": (
+        "qbittorrent_log_main",
+        "qbittorrent_log_peers",
+    ),
+    "qbittorrent_sync": (
+        "qbittorrent_sync_maindata",
+        "qbittorrent_sync_torrent_peers",
+    ),
+    "qbittorrent_auth": ("qbittorrent_logout",),
+}
+
+
+def _op_line(name: str, fn: Any) -> str:
+    """One line of a group tool's description: signature + one-line doc."""
+    sig = ", ".join(
+        p.name if p.default is inspect.Parameter.empty else f"{p.name}={p.default!r}"
+        for p in inspect.signature(fn).parameters.values()
+    )
+    return f"- {name}({sig}) — {' '.join((fn.__doc__ or '').split())}"
+
+
+def _register_group(
+    group: str, names: tuple[str, ...], ns: dict[str, Any], readonly_names: set[str]
+) -> None:
+    """Register one dispatching tool that fans out to every function named
+    in `names`. The functions themselves are untouched - they're just
+    looked up by name instead of each becoming its own tool."""
+    fns = {n: ns[n] for n in names}
+
+    async def dispatch(
+        operation: str, arguments: JSONObj | None = None
+    ) -> JSONVal | str | int:
+        # `| str | int` covers the many write endpoints that echo back "Ok."
+        # as plain text, plus the transfer-limit reads that return a bare int.
+        fn = fns.get(operation)
+        if fn is None:
+            raise ToolError(
+                f"Unknown operation {operation!r} for {group}. Valid: {', '.join(fns)}"
+            )
+        return await fn(**(arguments or {}))
+
+    dispatch.__annotations__["operation"] = Literal[names]
+    ann = READONLY if set(names) <= readonly_names else None
+    mcp.add_tool(
+        Tool.from_function(
+            dispatch,
+            name=group,
+            description=(
+                f"{group.replace('_', ' ')} operations on qBittorrent. Pass `operation` and an "
+                f"`arguments` dict matching that operation's parameters.\n\n"
+                + "\n".join(_op_line(n, f) for n, f in fns.items())
+            ),
+            annotations=ann,
+        )
+    )
+
+
+def _register_tools() -> None:
+    ns = globals()
+    readonly_names: set[str] = {
+        "qbittorrent_app_build_info",
+        "qbittorrent_app_default_save_path",
+        "qbittorrent_app_get_cookies",
+        "qbittorrent_app_get_preferences",
+        "qbittorrent_app_version",
+        "qbittorrent_app_webapi_version",
+        "qbittorrent_log_main",
+        "qbittorrent_log_peers",
+        "qbittorrent_rss_items",
+        "qbittorrent_rss_matching_articles",
+        "qbittorrent_rss_rules",
+        "qbittorrent_search_plugins",
+        "qbittorrent_search_results",
+        "qbittorrent_search_status",
+        "qbittorrent_sync_maindata",
+        "qbittorrent_sync_torrent_peers",
+        "qbittorrent_torrent_contents",
+        "qbittorrent_torrent_piece_hashes",
+        "qbittorrent_torrent_piece_states",
+        "qbittorrent_torrent_properties",
+        "qbittorrent_torrent_trackers",
+        "qbittorrent_torrent_web_seeds",
+        "qbittorrent_torrents_categories",
+        "qbittorrent_torrents_download_limit",
+        "qbittorrent_torrents_list",
+        "qbittorrent_torrents_tags",
+        "qbittorrent_torrents_upload_limit",
+        "qbittorrent_transfer_download_limit",
+        "qbittorrent_transfer_info",
+        "qbittorrent_transfer_speed_limits_mode",
+        "qbittorrent_transfer_upload_limit",
+    }
+    for group, names in _GROUPS.items():
+        _register_group(group, names, ns, readonly_names)
+
+
+_register_tools()
 
 
 def main() -> None:
     global _client, _base_url, _api_key, _username, _password
     url = os.environ.get("QBITTORRENT_URL")
     if not url:
-        print("QBITTORRENT_URL environment variable is required (e.g. http://localhost:8080)", file=sys.stderr)
+        print(
+            "QBITTORRENT_URL environment variable is required (e.g. http://localhost:8080)",
+            file=sys.stderr,
+        )
         raise SystemExit(1)
     _base_url = url.rstrip("/")
     _api_key = os.environ.get("QBITTORRENT_API_KEY") or None
     _username = os.environ.get("QBITTORRENT_USERNAME") or None
     _password = os.environ.get("QBITTORRENT_PASSWORD") or None
-    _client = build_client(_base_url, api_key=_api_key, username=_username, password=_password)
+    _client = build_client(
+        _base_url, api_key=_api_key, username=_username, password=_password
+    )
     mcp.run()
 
 
