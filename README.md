@@ -1,6 +1,6 @@
 # qbittorrent-mcp
 
-Part of the [arr-mcps](https://github.com/SavageCore/arr-mcps) collection.
+Part of the [arr-mcps](https://github.com/arr-mcps/arr-mcps) collection.
 MCP server exposing [qBittorrent](https://github.com/qbittorrent/qBittorrent)'s
 WebUI API v2 (qBittorrent >= 5.0) as tools, so an LLM can manage your torrents:
 list, inspect properties/trackers/files, add/pause/resume/delete torrents,
@@ -22,7 +22,7 @@ enabled (Tools > Preferences > WebUI) and one of two auth methods:
 
 ## Install
 
-Download a wheel from the [latest release](https://github.com/SavageCore/qbittorrent-mcp/releases/latest)
+Download a wheel from the [latest release](https://github.com/arr-mcps/qbittorrent-mcp/releases/latest)
 and install it as a `uv` tool (no repo checkout needed):
 
 ```bash
@@ -121,7 +121,7 @@ make help  # list all commands
 | `make clean` | Remove build artifacts |
 
 The release workflow (`.github/workflows/release.yml`) builds and publishes to
-[Releases](https://github.com/SavageCore/qbittorrent-mcp/releases) whenever a `v*`
+[Releases](https://github.com/arr-mcps/qbittorrent-mcp/releases) whenever a `v*`
 tag is pushed - so the usual flow is `make bump-patch`, commit, then tag and
 push.
 
